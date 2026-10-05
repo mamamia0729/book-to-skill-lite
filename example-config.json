@@ -1,30 +1,30 @@
 {
-  "skill_prefix": "CCNA",
+  "skill_prefix": "CERT-GUIDE",
   "output_dir": "D:/",
   "layers": [
     {
-      "name": "Networking Foundations",
-      "slug": "01-networking-foundations",
-      "description": "TCP/IP model, Ethernet LANs, WANs, and IP routing fundamentals",
-      "pdf": "C:/Users/thle/Downloads/CCNA-Volume-1.pdf",
+      "name": "Foundations",
+      "slug": "01-foundations",
+      "description": "Core concepts and fundamentals",
+      "pdf": "path/to/your-book.pdf",
       "chapters": [
         {
-          "name": "Introduction to TCP/IP Networking",
-          "slug": "ch01-tcpip-networking",
-          "start_page": 148,
-          "end_page": 199
+          "name": "Chapter 1 - Introduction",
+          "slug": "ch01-intro",
+          "start_page": 30,
+          "end_page": 75
         },
         {
-          "name": "Fundamentals of Ethernet LANs",
-          "slug": "ch02-ethernet-lans",
-          "start_page": 200,
-          "end_page": 270
+          "name": "Chapter 2 - Core Concepts",
+          "slug": "ch02-core",
+          "start_page": 76,
+          "end_page": 130
         },
         {
-          "name": "Fundamentals of WANs and IP Routing",
-          "slug": "ch03-wans-ip-routing",
-          "start_page": 271,
-          "end_page": 328
+          "name": "Chapter 3 - Fundamentals",
+          "slug": "ch03-fundamentals",
+          "start_page": 131,
+          "end_page": 190
         }
       ]
     }

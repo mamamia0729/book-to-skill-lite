@@ -6,7 +6,7 @@ Author: Thinh Le
 
 ## Why this exists
 
-I needed to turn 5,000+ pages of CCNA cert guides into Claude Desktop skills. The existing [book-to-skill](https://github.com/virgiliojr94/book-to-skill) tool is well-built, but it sends the entire book through an AI agent for structuring - that's ~2M+ tokens for a large book. On a limited token budget, that's not practical.
+I needed to turn large technical certification guides into Claude Desktop skills. The existing [book-to-skill](https://github.com/virgiliojr94/book-to-skill) tool is well-built, but it sends the entire book through an AI agent for structuring - that's ~2M+ tokens for a large book. On a limited token budget, that's not practical.
 
 This tool does the extraction with pure Python. Zero AI tokens burned. The tradeoff is real and I want to be upfront about it.
 
@@ -34,8 +34,8 @@ This tool does the extraction with pure Python. Zero AI tokens burned. The trade
 
 ### What this tool does differently
 
-- **Zero token cost.** The whole point. For a 5000-page book, that's ~2M tokens saved.
-- **Diagram placeholders.** When the PDF says "see Figure 5-3", this tool inserts a `<!-- DIAGRAM -->` comment with surrounding context so Claude can reconstruct the visual when teaching.
+- **Zero token cost.** The whole point. For a large book, that's millions of tokens saved.
+- **Diagram placeholders.** When the PDF says "see Figure X-Y", this tool inserts a `<!-- DIAGRAM -->` comment with surrounding context so Claude can reconstruct the visual when teaching.
 - **Layer-based splitting.** Groups related chapters into study-session-sized zips (~25-30K tokens). You load only the layer you're studying.
 - **Teaching rules in SKILL.md.** Every zip includes instructions telling Claude to auto-generate diagrams, use concise format, and produce Anki-worthy flashcards.
 
@@ -73,20 +73,20 @@ See `example-config.json` for the structure. Map chapters to layers with page ra
 
 ```json
 {
-  "skill_prefix": "CCNA",
+  "skill_prefix": "CERT-GUIDE",
   "output_dir": "D:/",
   "layers": [
     {
-      "name": "Networking Foundations",
-      "slug": "01-networking-foundations",
-      "description": "TCP/IP, Ethernet, WANs",
+      "name": "Foundations",
+      "slug": "01-foundations",
+      "description": "Core concepts and fundamentals",
       "pdf": "path/to/book.pdf",
       "chapters": [
         {
-          "name": "Introduction to TCP/IP Networking",
-          "slug": "ch01-tcpip",
-          "start_page": 148,
-          "end_page": 199
+          "name": "Chapter 1 - Introduction",
+          "slug": "ch01-intro",
+          "start_page": 30,
+          "end_page": 75
         }
       ]
     }
@@ -105,12 +105,12 @@ Output: one zip per layer in `output_dir`, ready for Claude Desktop upload.
 ## Skill zip structure
 
 ```
-CCNA-01-networking-foundations/
+CERT-GUIDE-01-foundations/
   SKILL.md              # Teaching rules + chapter index
   references/
-    ch01-tcpip.md       # Extracted text with diagram placeholders
-    ch02-ethernet.md
-    ch03-wans.md
+    ch01-intro.md       # Extracted text with diagram placeholders
+    ch02-basics.md
+    ch03-core.md
 ```
 
 ## Teaching rules (baked into every SKILL.md)
