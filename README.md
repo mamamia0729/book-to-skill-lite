@@ -17,7 +17,7 @@ This tool does the extraction with pure Python. Zero AI tokens burned. The trade
 | **Extraction** | AI agent reads and structures | Python (pymupdf) - no AI |
 | **Token cost** | ~2M+ for a 5000-page book | Zero |
 | **Output quality** | Higher - AI distills key concepts, builds glossary, identifies patterns | Lower - raw text extraction with basic cleanup |
-| **Diagram handling** | No special handling | Inserts placeholders - Claude renders as SVG artifacts with network icons |
+| **Diagram handling** | No special handling | Inserts placeholders - Claude rebuilds as diagrams (format depends on prompt) |
 | **Chapter loading** | On-demand (agent skill) | All loaded at once (Claude Desktop zip) |
 | **Supported formats** | PDF, EPUB, DOCX, HTML, RTF, MOBI | PDF only |
 | **Hosting** | Claude Code, Copilot CLI, Amp, OpenCode | Claude Desktop only |
@@ -35,7 +35,7 @@ This tool does the extraction with pure Python. Zero AI tokens burned. The trade
 ### What this tool does differently
 
 - **Zero token cost.** The whole point. For a large book, that's millions of tokens saved.
-- **Diagram placeholders.** When the PDF says "see Figure X-Y", this tool inserts a `<!-- DIAGRAM -->` comment with surrounding context. Claude Desktop renders these as SVG artifacts with proper network device icons.
+- **Diagram placeholders.** When the PDF says "see Figure X-Y", this tool inserts a `<!-- DIAGRAM -->` comment with surrounding context. The SKILL.md teaching rules ask Claude to rebuild these as SVG artifacts, but the actual format (SVG artifact, inline ASCII, table) depends on how you prompt.
 - **Layer-based splitting.** Groups related chapters into study-session-sized zips (~25-30K tokens). You load only the layer you're studying.
 - **Teaching rules in SKILL.md.** Every zip includes instructions telling Claude to auto-generate diagrams, use concise format, and produce Anki-worthy flashcards.
 
@@ -115,10 +115,13 @@ CERT-GUIDE-01-foundations/
 
 ## Teaching rules (baked into every SKILL.md)
 
-- Render `<!-- DIAGRAM -->` placeholders as SVG artifacts with standard network device icons
-- Also generate SVG for concepts without placeholders that benefit from a visual
+- Rebuild `<!-- DIAGRAM -->` placeholders as diagrams with standard network device icons
+- Also generate diagrams for concepts without placeholders that benefit from a visual
 - 2-3 bullets, then diagram, then explanation
 - Spell out acronyms on first use
+
+The teaching rules default to SVG artifacts, but Claude's actual output format varies by prompt. Say "use SVG artifacts" to get artifact-panel SVGs, or just "teach me" for whatever format fits the conversation (often inline ASCII or tables).
+
 
 ## License
 
