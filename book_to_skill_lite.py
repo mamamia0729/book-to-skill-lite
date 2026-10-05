@@ -164,6 +164,34 @@ When teaching content from any chapter:
 """
 
 
+def print_zip_stats(zip_path):
+    """Print size, line count, and diagram placeholder count for a skill zip."""
+    with zipfile.ZipFile(zip_path) as zf:
+        total_bytes = 0
+        total_lines = 0
+        total_diagrams = 0
+        files = []
+
+        for name in zf.namelist():
+            info = zf.getinfo(name)
+            total_bytes += info.file_size
+            content = zf.read(name).decode('utf-8')
+            lines = content.count('\n')
+            # Only count real placeholders in reference files, not the
+            # template text in SKILL.md
+            is_ref = 'references/' in name
+            diagrams = len(re.findall(r'<!-- DIAGRAM: .+? -->', content)) if is_ref else 0
+            total_lines += lines
+            total_diagrams += diagrams
+            files.append((name, info.file_size, lines, diagrams))
+
+        print(f"  Stats: {total_bytes:,} bytes | {total_lines:,} lines | {total_diagrams} diagrams")
+        for name, size, lines, diagrams in files:
+            short = name.split('/')[-1]
+            diag_str = f" | {diagrams} diagrams" if diagrams else ""
+            print(f"    {size:>8,} bytes  {lines:>5} lines{diag_str}  {short}")
+
+
 def process_config(config_path):
     """Process a config file and build skill zips."""
     with open(config_path) as f:
@@ -227,6 +255,7 @@ def process_config(config_path):
 
         file_count = len(all_files) + 1
         print(f"  Built: {zip_path} ({file_count} files)")
+        print_zip_stats(zip_path)
 
     print("\n=== All layers complete ===")
 
@@ -420,9 +449,10 @@ def generate_config_from_toc(pdf_paths, output_path="config.json"):
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("Usage:")
-        print("  python book_to_skill_lite.py config.json          # Build skills from config")
-        print("  python book_to_skill_lite.py --toc file.pdf ...    # Print TOC to plan config")
-        print("  python book_to_skill_lite.py --auto file.pdf       # Auto-generate config from TOC")
+        print("  python book_to_skill_lite.py config.json           # Build skills from config")
+        print("  python book_to_skill_lite.py --toc file.pdf ...     # Print TOC to plan config")
+        print("  python book_to_skill_lite.py --auto file.pdf        # Auto-generate config from TOC")
+        print("  python book_to_skill_lite.py --stats file.zip ...   # Show stats for existing zips")
         sys.exit(1)
 
     if sys.argv[1] == '--toc':
@@ -433,5 +463,9 @@ if __name__ == '__main__':
             sys.exit(1)
         out = sys.argv[3] if len(sys.argv) > 3 else "config.json"
         auto_generate_config(sys.argv[2], out)
+    elif sys.argv[1] == '--stats':
+        for zp in sys.argv[2:]:
+            print(f"\n=== {os.path.basename(zp)} ===")
+            print_zip_stats(zp)
     else:
         process_config(sys.argv[1])
