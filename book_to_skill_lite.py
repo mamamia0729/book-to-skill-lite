@@ -116,10 +116,162 @@ def insert_diagram_placeholders(text):
     return '\n'.join(result)
 
 
+def clean_lab_artifacts(text):
+    """Remove common lab guide PDF artifacts.
+
+    Strips page markers [nn], duplicate consecutive headers, footer lines
+    with manual page numbers, and console switch tags.
+    """
+    lines = text.split('\n')
+    result = []
+    prev_stripped = ''
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Skip page markers like [19], [20]
+        if re.match(r'^\[\d+\]$', stripped):
+            continue
+
+        # Skip footer lines like "H A N D S - O N  L A B S  M A N U A L | 17"
+        if re.search(r'[A-Z]\s+[A-Z]\s+[A-Z].*\|\s*\d+', stripped):
+            continue
+
+        # Skip lab ID lines like "HOL-2535-01-VCF-L: Virtualization 101"
+        if re.match(r'^HOL-\d+-\d+-', stripped):
+            continue
+
+        # Skip console switch tags
+        if stripped.startswith('[vlp:'):
+            continue
+
+        # Deduplicate consecutive identical lines (PDF header doubling)
+        if stripped and stripped == prev_stripped:
+            continue
+
+        result.append(line)
+        if stripped:
+            prev_stripped = stripped
+
+    return '\n'.join(result)
+
+
+def insert_workflow_placeholders(text):
+    """Detect procedural step sequences and insert workflow placeholders.
+
+    Lab guides have sections with numbered steps (1. Click..., 2. Select...).
+    This groups consecutive step sections into workflows and inserts
+    <!-- WORKFLOW: task - step1 > step2 > step3 --> placeholders.
+    """
+    lines = text.split('\n')
+    result = []
+
+    step_pattern = re.compile(r'^\d+\.\s*\w')
+
+    # Section headers: title-case, short, no sentence-ending punctuation,
+    # no lowercase-starting words (except small words), look like headings
+    def is_section_header(s):
+        if not s or len(s) > 80 or len(s) < 5:
+            return False
+        # Must start with uppercase
+        if not s[0].isupper():
+            return False
+        # Reject lines that look like instructions (contain common verbs
+        # at start that indicate body text, not a heading)
+        if re.match(r'^(Click|Press|Enter|Select|Note|If |You |This |Since |Because |In this)', s):
+            return False
+        # Reject lines ending with period (sentence, not heading)
+        if s.endswith('.'):
+            return False
+        # Must look like a title: mostly capitalized words
+        words = s.split()
+        small_words = {'a', 'an', 'the', 'in', 'on', 'of', 'to', 'for',
+                       'and', 'or', 'with', 'at', 'by', 'vs', 'is'}
+        cap_count = sum(1 for w in words if w[0].isupper() or w in small_words)
+        return cap_count >= len(words) * 0.6
+
+    # First pass: identify section boundaries and their steps
+    sections = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+
+        if is_section_header(stripped) and not step_pattern.match(stripped):
+            # Scan ahead for numbered steps
+            steps = []
+            header = stripped
+            for j in range(i + 1, min(i + 15, len(lines))):
+                step_match = step_pattern.match(lines[j].strip())
+                if step_match:
+                    action = re.sub(r'^\d+\.\s*', '', lines[j].strip())
+                    action = action.split('.')[0].split(',')[0][:60]
+                    steps.append(action)
+
+            if len(steps) >= 1:
+                sections.append({
+                    'line_idx': i,
+                    'header': header,
+                    'steps': steps
+                })
+
+        i += 1
+
+    # Group sections into workflows, capping at max_steps per workflow
+    if not sections:
+        return text
+
+    max_steps = 10
+    workflows = []
+    current_wf = [sections[0]]
+
+    for sec in sections[1:]:
+        prev_end = current_wf[-1]['line_idx']
+        gap_too_large = sec['line_idx'] - prev_end > 50
+        wf_full = len(current_wf) >= max_steps
+
+        if gap_too_large or wf_full:
+            if len(current_wf) >= 2:
+                workflows.append(current_wf)
+            current_wf = [sec]
+        else:
+            current_wf.append(sec)
+
+    if len(current_wf) >= 2:
+        workflows.append(current_wf)
+
+    # Build placeholder insertion points
+    placeholders = {}
+    for wf in workflows:
+        wf_name = wf[0]['header']
+        step_names = [sec['header'] for sec in wf]
+        steps_str = ' > '.join(step_names)
+        placeholder = f'\n<!-- WORKFLOW: {wf_name} - {steps_str} -->\n'
+        placeholders[wf[0]['line_idx']] = placeholder
+
+    # Insert placeholders
+    for i, line in enumerate(lines):
+        if i in placeholders:
+            result.append(placeholders[i])
+        result.append(line)
+
+    return '\n'.join(result)
+
+
+def has_figure_references(text):
+    """Check if text contains textbook-style Figure X-Y references."""
+    return len(re.findall(r'Figure\s+\d+[-\u2013]\d+', text, re.IGNORECASE)) >= 3
+
+
 def build_chapter_md(chapter_name, pages_text):
     """Build a markdown file from extracted pages."""
     combined = '\n\n'.join(text for _, text in pages_text)
-    combined = insert_diagram_placeholders(combined)
+
+    # Auto-detect content type
+    if has_figure_references(combined):
+        combined = insert_diagram_placeholders(combined)
+    else:
+        combined = clean_lab_artifacts(combined)
+        combined = insert_workflow_placeholders(combined)
 
     # Clean up common PDF artifacts
     combined = re.sub(r'\n{3,}', '\n\n', combined)
@@ -147,12 +299,15 @@ version: 1.0
 
 When teaching content from any chapter:
 - When you encounter a `<!-- DIAGRAM: ... -->` placeholder, render it as
-  an SVG artifact using standard network device icons (router, switch, PC,
+  a diagram using standard network device icons (router, switch, PC,
   firewall, server, cloud, wireless AP). Use proper shapes, labels, and
   connection lines to reconstruct the original figure
+- When you encounter a `<!-- WORKFLOW: ... -->` placeholder, render it as
+  a step-by-step flowchart showing the procedure sequence with decision
+  points, inputs, and expected results at each step
 - For concepts without a placeholder that would benefit from a visual,
-  also generate an SVG artifact (topologies, packet flows, protocol
-  exchanges, decision trees, architecture diagrams)
+  also generate a diagram (topologies, packet flows, protocol exchanges,
+  decision trees, architecture diagrams, procedure flowcharts)
 - Use 2-3 bullets max, then diagram, then explanation
 - Spell out every acronym on first use
 
