@@ -48,39 +48,67 @@ def insert_diagram_placeholders(text):
 
     Scans for 'Figure X-Y' patterns and surrounding context to build
     descriptive placeholders that Claude can reconstruct as diagrams.
+    Only emits one placeholder per figure number (first occurrence with
+    the best description wins).
     """
     lines = text.split('\n')
     result = []
+    seen_figures = {}
+
+    # Pattern for figure references like "Figure 1-2" or "Figure 12-3"
     figure_pattern = re.compile(
-        r'(Figure\s+\d+[-–]\d+)\s*(.*)', re.IGNORECASE
+        r'(Figure\s+\d+[-–]\d+)', re.IGNORECASE
+    )
+    # Pattern for standalone caption lines: "Figure X-Y  Caption Text Here"
+    caption_pattern = re.compile(
+        r'^(Figure\s+\d+[-–]\d+)\s+([A-Z][\w\s,\-/()\']+)', re.IGNORECASE
     )
 
+    # First pass: collect best description per figure from caption lines
+    for line in lines:
+        cap_match = caption_pattern.match(line.strip())
+        if cap_match:
+            fig_key = re.sub(r'\s+', ' ', cap_match.group(1)).strip()
+            desc = cap_match.group(2).strip().rstrip('.')
+            if desc and len(desc) > 5:
+                seen_figures[fig_key] = desc
+
+    # Second pass: collect from context if not found in captions
+    for idx, line in enumerate(lines):
+        matches = figure_pattern.findall(line)
+        for raw_ref in matches:
+            fig_key = re.sub(r'\s+', ' ', raw_ref).strip()
+            if fig_key in seen_figures:
+                continue
+            # Gather context: surrounding text for description
+            context_parts = []
+            for j in range(idx + 1, min(idx + 4, len(lines))):
+                stripped = lines[j].strip()
+                if stripped and not figure_pattern.search(stripped):
+                    context_parts.append(stripped)
+                else:
+                    break
+            context = ' '.join(context_parts)
+            if context and len(context) > 10:
+                seen_figures[fig_key] = context[:200]
+
+    # Third pass: emit placeholders (one per figure, at first caption line)
+    emitted = set()
     i = 0
     while i < len(lines):
         line = lines[i]
-        match = figure_pattern.search(line)
-        if match:
-            fig_ref = match.group(1)
-            caption = match.group(2).strip()
-
-            # Gather context: up to 3 lines after for description
-            context_lines = []
-            for j in range(i + 1, min(i + 4, len(lines))):
-                if lines[j].strip() and not figure_pattern.search(lines[j]):
-                    context_lines.append(lines[j].strip())
+        cap_match = caption_pattern.match(line.strip())
+        if cap_match:
+            fig_key = re.sub(r'\s+', ' ', cap_match.group(1)).strip()
+            if fig_key not in emitted:
+                desc = seen_figures.get(fig_key, '')
+                if desc:
+                    result.append(
+                        f'\n<!-- DIAGRAM: {fig_key} - {desc} -->\n'
+                    )
                 else:
-                    break
-
-            context = ' '.join(context_lines) if context_lines else ''
-            desc = caption if caption else context
-            if desc:
-                placeholder = (
-                    f'\n<!-- DIAGRAM: {fig_ref} - {desc[:200]} -->\n'
-                )
-            else:
-                placeholder = f'\n<!-- DIAGRAM: {fig_ref} -->\n'
-
-            result.append(placeholder)
+                    result.append(f'\n<!-- DIAGRAM: {fig_key} -->\n')
+                emitted.add(fig_key)
         else:
             result.append(line)
         i += 1
