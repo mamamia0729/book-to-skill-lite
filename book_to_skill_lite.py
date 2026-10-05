@@ -231,14 +231,180 @@ def process_config(config_path):
     print("\n=== All layers complete ===")
 
 
-def generate_config_from_toc(pdf_paths, output_path="config.json"):
-    """Helper: generate a starter config from PDF table of contents."""
+def slugify(title):
+    """Turn a title into a filename-safe slug."""
+    slug = title.lower()
+    slug = re.sub(r'[^a-z0-9]+', '-', slug)
+    slug = slug.strip('-')
+    if len(slug) > 50:
+        slug = slug[:50].rsplit('-', 1)[0]
+    return slug
+
+
+def auto_generate_config(pdf_path, output_path="config.json"):
+    """Analyze TOC and generate a ready-to-use config with logical layers.
+
+    Groups top-level TOC entries as layers, level-2 entries as chapters.
+    Calculates page ranges from consecutive TOC page numbers.
+    """
+    doc = pymupdf.open(pdf_path)
+    total_pages = len(doc)
+    toc = doc.get_toc()
+    doc.close()
+
+    if not toc:
+        print("ERROR: No table of contents found in this PDF.")
+        print("Use --toc to inspect the PDF, then create config.json manually.")
+        return
+
+    levels = sorted(set(level for level, _, _ in toc))
+    layer_level = levels[0]
+    chapter_level = levels[1] if len(levels) > 1 else levels[0]
+
+    skip_titles = {
+        'cover', 'title', 'copyright', 'dedication', 'acknowledgment',
+        'about', 'contents', 'foreword', 'preface', 'icon', 'convention',
+        'reader service', 'figure credit', 'halftitle', 'companion',
+        'appendix', 'index', 'glossary',
+    }
+
+    def is_front_matter(title):
+        lower = title.lower()
+        return any(skip in lower for skip in skip_titles)
+
+    all_pages = [(level, title, page) for level, title, page in toc]
+
+    layers = []
+    current_layer = None
+
+    for idx, (level, title, page) in enumerate(all_pages):
+        if level == layer_level:
+            if is_front_matter(title):
+                continue
+
+            end_page = total_pages
+            for future_level, _, future_page in all_pages[idx + 1:]:
+                if future_level == layer_level:
+                    end_page = future_page - 1
+                    break
+
+            current_layer = {
+                'name': title.strip(),
+                'slug': slugify(title),
+                'start_page': page,
+                'end_page': end_page,
+                'chapters': []
+            }
+            layers.append(current_layer)
+
+        elif level == chapter_level and current_layer is not None:
+            if is_front_matter(title):
+                continue
+
+            ch_end = current_layer['end_page']
+            for future_level, _, future_page in all_pages[idx + 1:]:
+                if future_level <= chapter_level:
+                    ch_end = future_page - 1
+                    break
+
+            current_layer['chapters'].append({
+                'name': title.strip(),
+                'slug': slugify(title),
+                'start_page': page,
+                'end_page': ch_end
+            })
+
+    # Flat TOC: each entry is both layer and chapter
+    if layer_level == chapter_level:
+        for layer in layers:
+            if not layer['chapters']:
+                layer['chapters'].append({
+                    'name': layer['name'],
+                    'slug': layer['slug'],
+                    'start_page': layer['start_page'],
+                    'end_page': layer['end_page']
+                })
+
+    # Too many chapters (e.g. lab guides where every screenshot step is a
+    # TOC entry): collapse into a single chapter per layer
+    max_chapters = 20
+    for layer in layers:
+        if len(layer['chapters']) > max_chapters:
+            first_page = layer['chapters'][0]['start_page']
+            last_page = layer['chapters'][-1]['end_page']
+            collapsed_count = len(layer['chapters'])
+            layer['chapters'] = [{
+                'name': layer['name'],
+                'slug': layer['slug'],
+                'start_page': first_page,
+                'end_page': last_page
+            }]
+            layer['_collapsed'] = collapsed_count
+
+    # Layers with no chapters: treat layer itself as one chapter
+    for layer in layers:
+        if not layer['chapters']:
+            layer['chapters'].append({
+                'name': layer['name'],
+                'slug': layer['slug'],
+                'start_page': layer['start_page'],
+                'end_page': layer['end_page']
+            })
+
+    pdf_basename = os.path.basename(pdf_path)
+    prefix = slugify(os.path.splitext(pdf_basename)[0]).upper()[:20]
+
     config = {
-        "skill_prefix": "SKILL",
+        "skill_prefix": prefix,
         "output_dir": "D:/",
         "layers": []
     }
 
+    for layer in layers:
+        config['layers'].append({
+            "name": layer['name'],
+            "slug": layer['slug'],
+            "description": layer['name'],
+            "pdf": pdf_path,
+            "chapters": [
+                {
+                    "name": ch['name'],
+                    "slug": ch['slug'],
+                    "start_page": ch['start_page'],
+                    "end_page": ch['end_page']
+                }
+                for ch in layer['chapters']
+            ]
+        })
+
+    with open(output_path, 'w') as f:
+        json.dump(config, f, indent=2)
+
+    print(f"\n=== Auto-generated config: {output_path} ===")
+    print(f"PDF: {pdf_basename} ({total_pages} pages)")
+    print(f"Prefix: {prefix}")
+    print(f"Layers: {len(layers)}\n")
+
+    for i, cfg_layer in enumerate(config['layers']):
+        ch_count = len(cfg_layer['chapters'])
+        first_page = cfg_layer['chapters'][0]['start_page']
+        last_page = cfg_layer['chapters'][-1]['end_page']
+        collapsed = layers[i].get('_collapsed')
+        print(f"  {cfg_layer['name']}")
+        if collapsed:
+            print(f"    Pages {first_page}-{last_page} | 1 chapter (collapsed from {collapsed} TOC entries)")
+        else:
+            print(f"    Pages {first_page}-{last_page} | {ch_count} chapter(s)")
+        for ch in cfg_layer['chapters']:
+            print(f"      {ch['start_page']:>4}-{ch['end_page']:<4} {ch['name']}")
+        print()
+
+    print(f"Review {output_path}, then run:")
+    print(f"  python book_to_skill_lite.py {output_path}")
+
+
+def generate_config_from_toc(pdf_paths, output_path="config.json"):
+    """Helper: print TOC for manual config planning."""
     for pdf_path in pdf_paths:
         print(f"\n=== TOC: {pdf_path} ===")
         toc = get_toc(pdf_path)
@@ -248,20 +414,24 @@ def generate_config_from_toc(pdf_paths, output_path="config.json"):
                 print(f"{indent}p.{page:>4} | {title}")
 
     print(f"\nUse the TOC above to fill in config.json with page ranges.")
-    print(f"Template written to: {output_path}")
-
-    with open(output_path, 'w') as f:
-        json.dump(config, f, indent=2)
+    print("Or use --auto to generate config automatically.")
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("Usage:")
-        print("  python book_to_skill_lite.py config.json        # Build skills from config")
-        print("  python book_to_skill_lite.py --toc file.pdf ...  # Print TOC to plan config")
+        print("  python book_to_skill_lite.py config.json          # Build skills from config")
+        print("  python book_to_skill_lite.py --toc file.pdf ...    # Print TOC to plan config")
+        print("  python book_to_skill_lite.py --auto file.pdf       # Auto-generate config from TOC")
         sys.exit(1)
 
     if sys.argv[1] == '--toc':
         generate_config_from_toc(sys.argv[2:])
+    elif sys.argv[1] == '--auto':
+        if len(sys.argv) < 3:
+            print("Usage: python book_to_skill_lite.py --auto file.pdf [output.json]")
+            sys.exit(1)
+        out = sys.argv[3] if len(sys.argv) > 3 else "config.json"
+        auto_generate_config(sys.argv[2], out)
     else:
         process_config(sys.argv[1])
