@@ -146,14 +146,14 @@ version: 1.0
 ## Teaching Rules
 
 When teaching content from any chapter:
-- Auto-generate ASCII or Mermaid diagrams for any concept that would
-  normally have a visual (topologies, packet flows, protocol exchanges,
-  decision trees, architecture diagrams)
-- When you encounter a `<!-- DIAGRAM: ... -->` placeholder, reconstruct
-  the diagram using ASCII art for network topologies or Mermaid for
-  flowcharts/sequences/state diagrams
+- When you encounter a `<!-- DIAGRAM: ... -->` placeholder, render it as
+  an SVG artifact using standard network device icons (router, switch, PC,
+  firewall, server, cloud, wireless AP). Use proper shapes, labels, and
+  connection lines to reconstruct the original figure
+- For concepts without a placeholder that would benefit from a visual,
+  also generate an SVG artifact (topologies, packet flows, protocol
+  exchanges, decision trees, architecture diagrams)
 - Use 2-3 bullets max, then diagram, then explanation
-- Mark Anki-worthy Q/A pairs at the end of each teaching block
 - Spell out every acronym on first use
 
 ## Layers
